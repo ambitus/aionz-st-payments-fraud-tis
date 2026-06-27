@@ -576,8 +576,8 @@ This project is licensed under the terms specified in the LICENSE file.
 
     - Pui Yen (MVI Tech)
     - Alex Osadchyy (IBM)
-    - Erik Altman 
-    - Saurabh Srivastava
+    - Erik Altman (IBM)
+    - Saurabh Srivastava (IBM)
 
 ## Related Resources
 
