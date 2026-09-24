@@ -10,125 +10,102 @@ This solution template focuses on detecting **Authorized Push Payment (APP) frau
 
 ### Key Features
 
-- **LSTM-based Deep Learning Model**: Utilizes recurrent neural networks to capture temporal patterns in transaction sequences
-- **Comprehensive Feature Engineering**: Incorporates transaction details, account characteristics, bank metrics, and behavioral patterns
-- **Multi-Dataset Integration**: Combines data from banks, accounts (people and companies), and bank transfers
-- **ONNX Model Export**: Unified pipeline with reprocessing and trained model exported in ONNX format for optimized inference
-- **IBM Telum AI Acceleration**: Leverages IBM Z Integrated Accelerator for AI with ONNX Runtime
-- **Triton Inference Server**: Production-ready model serving with high-performance inference and Snap ML preprocessing
+- **LSTM-based Deep Learning Model**: Recurrent neural network capturing temporal patterns across 7-transaction sliding windows
+- **Unified ONNX Export**: Preprocessing (cyclical encoding, log transforms, normalisations, vocabulary lookups) and the two-layer LSTM are fused into a single self-contained ONNX file — no separate preprocessing step at serving time
+- **Comprehensive Feature Engineering**: 15 numeric and 9 categorical features per transaction covering amounts, account characteristics, bank metrics, and temporal patterns
+- **IBM Telum AI Acceleration**: On-chip AI acceleration via the IBM Z Integrated Accelerator for AI with ONNX Runtime
+- **Triton Inference Server**: Production-ready model serving with HTTP/REST, gRPC, and Prometheus endpoints
 
 ### IBM Supported Components
-- **AI Toolkit for IBM Z and LinuxONE** A family of popular open-source AI frameworks with IBM Elite Support and adapted for IBM Z and LinuxONE hardware.
-- **IBM Synthetic Data Sets**  A family of artificially generated, enterprise-grade datasets that enhance predictive artificial intelligence (AI) model training and large language models (LLMs).
+- **AI Toolkit for IBM Z and LinuxONE** — A family of popular open-source AI frameworks with IBM Elite Support adapted for IBM Z and LinuxONE hardware.
+- **IBM Synthetic Data Sets** —  are pre-built, artificially generated enterprise data collections designed to train and improve predictive artificial intelligence (AI) models without exposing real-world sensitive information.
 
 ## Use Cases
 
-This solution template is designed for:
-
-- **Real-time Fraud Detection**: Score transactions as they occur
-- **Batch Processing**: Analyze historical transactions for fraud patterns
+- **Real-time Fraud Detection**: Score transactions as they occur with sub-millisecond latency
+- **Batch Processing**: Analyse historical transactions for fraud patterns
 - **Risk Assessment**: Evaluate account and transaction risk levels
 - **Fraud Investigation**: Support fraud analysts with AI-powered insights
 
 ## Performance Benefits
 
-- **Hardware Acceleration**: Faster inference using IBM Telum AI accelerator
-- **Low Latency**: Optimized for real-time fraud detection requirements
+- **Hardware Acceleration**: Faster inference using the IBM Telum AI accelerator
+- **Low Latency**: Optimised for real-time fraud detection requirements
 - **High Throughput**: Efficient batch processing for large transaction volumes
 - **Energy Efficiency**: Reduced power consumption with dedicated AI hardware
 
 
 ## Solution Architecture
-This solution consists of two main components:
 
-### Part 1: Model Training
-**Location**: `zST-model-training-jupyter/APP_Fraud_LSTM_model_training.ipynb`
+This solution consists of three components:
 
-### Part 2: Model Serving
-**Location**: `zST-model-training-jupyter/APP_Fraud_LSTM_model_serving.ipynb`
+| Part | Notebook / Directory | Description |
+|------|----------------------|-------------|
+| **1 — Model Training** | `zST-model-training-jupyter/APP_Fraud_LSTM_model_training.ipynb` | Data preparation, feature engineering, LSTM training, ONNX export |
+| **2 — Serving (Jupyter)** | `zST-model-serving-jupyter/APP_Fraud_LSTM_model_serving.ipynb` | Direct ONNX Runtime inference — no server required |
+| **3 — Serving (Triton)** | `zST-model-serving-triton/` | Production serving via Triton Inference Server in Docker |
 
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                          PART 1: MODEL TRAINING                     │
-│              (APP_Fraud_LSTM_model_training.ipynb)                  │
-└─────────────────────────────────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────────────────┐
+│           PART 1: MODEL TRAINING                                     │
+│           zST-model-training-jupyter/                                │
+│           APP_Fraud_LSTM_model_training.ipynb                        │
+└──────────────────────────────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────────────────────┐
-│                     Data Sources                            │
-│  (Banks, Accounts, Transactions)                            │
+│  IBM Synthetic Datasets                                     │
+│  us_small_banks.csv · us_small_liquid_accts_people.csv      │
+│  us_small_liquid_accts_companies.csv                        │
+│  us_small_bank_xfers-chrono.csv                             │
 └────────────────────┬────────────────────────────────────────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
-│              Data Preparation & Feature Engineering         │
-│  - Merge datasets                                           │
-│  - Clean and transform features                             │
-│  - Handle missing values                                    │
+│  Data Preparation & Feature Engineering                     │
+│  - Join banks / accounts / transactions                     │
+│  - Cyclical temporal encoding (month, day, hour)            │
+│  - Boolean cast, NaN fill, categorical normalisation        │
 └────────────────────┬────────────────────────────────────────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
-│            Preprocessing Pipeline (Keras)                   │
-│  - Scaling (MinMax)                                         │
-│  - Encoding (OneHot, Ordinal)                               │
-│  - Imputation                                               │
+│  Keras Preprocessing Model                                  │
+│  - CyclicalEncoding + Normalization (temporal features)     │
+│  - LogTransform + Normalization (amounts, counts)           │
+│  - OnnxVocabOneHot (low-cardinality categoricals)           │
+│  - OnnxVocabOrdinal + Normalization (high-cardinality)      │
+│  - Boolean pass-through                                     │
 └────────────────────┬────────────────────────────────────────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                    LSTM Model Training  (Keras)             │
-│  - Sequential pattern learning                              │
-│  - Fraud detection optimization                             │
-│  - Model evaluation and validation                          │
+│  LSTM Model Training  (Keras / TensorFlow)                  │
+│  - 2 × LSTM(200) stacked layers                             │
+│  - Focal loss · EarlyStopping on train F1                   │
+│  - Chronological 50/30/20 train/val/test split              │
 └────────────────────┬────────────────────────────────────────┘
                      │
                      ▼
 ┌─────────────────────────────────────────────────────────────┐
-│                   Model & Preprocessor Export               │
-│  - ONNX model: fraud_detection_model.onnx                   │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-                     │
-┌─────────────────────────────────────────────────────────────────────┐
-│                          PART 2: MODEL SERVING                      │
-│              (APP_Fraud_LSTM_model_serving.ipynb)                   │
-└─────────────────────────────────────────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│              NVIDIA Triton Inference Server                 │
-│  - Model repository configuration                           │
-│  - Server initialization                                    │
-│  - Health checks and monitoring                             │
-└────────────────────┬────────────────────────────────────────┘
-                     │
-                     ▼
-┌────────────────────────────────────────────────────────────┐
-│              Inference Pipeline in Triton                  │
-│                                                            │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  Step 1: ONNX Runtime with IBM Telum EP             │   │
-│  │  - Load fraud_detection_model.onnx                  │   │
-│  │  - Initialize Telum Execution Provider              │   │
-│  │  - Hardware-accelerated LSTM inference              │   │
-│  │  ┌───────────────────────────────────────────────┐  │   │
-│  │  │  IBM Z Integrated Accelerator for AI          │  │   │
-│  │  │  (Telum Processor)                            │  │   │
-│  │  │  - On-chip AI acceleration                    │  │   │
-│  │  │  - Low-latency inference                      │  │   │
-│  │  │  - Energy-efficient processing                │  │   │
-│  │  └───────────────────────────────────────────────┘  │   │
-│  └─────────────────────────────────────────────────────┘   │
-└────────────────────┬───────────────────────────────────────┘
-                     │
-                     ▼
-┌─────────────────────────────────────────────────────────────┐
-│                  Real-time Fraud Detection                  │
-│  - Preprocessing and LSTM inference with Telum acceleration │
-│  - Fraud probability prediction                             │
-│  - Low-latency responses (<1ms)                             │
-│  - High-throughput batch processing                         │
-└─────────────────────────────────────────────────────────────┘
+│  Unified ONNX Export                                        │
+│  saved_model/fraud_detection_unified.onnx                   │
+│  (preprocessing + LSTM + sigmoid — single file)             │
+└──────┬──────────────────────────────────────┬───────────────┘
+       │                                      │
+       ▼                                      ▼
+┌──────────────────────────────┐  ┌──────────────────────────────────┐
+│  PART 2: SERVING (JUPYTER)   │  │  PART 3: SERVING (TRITON)        │
+│  zST-model-serving-jupyter/  │  │  zST-model-serving-triton/       │
+│  APP_Fraud_LSTM_model_       │  │  Dockerfile · serve.py ·         │
+│    serving.ipynb             │  │    test_triton_client.py         │
+│                              │  │                                  │
+│  ONNX Runtime (direct)       │  │  NVIDIA Triton Inference Server  │
+│  TelumExecutionProvider      │  │  ONNX Runtime backend            │
+│    or CPUExecutionProvider   │  │  TelumExecutionProvider (opt.)   │
+│  (auto-detected)             │  │                                  │
+│  Peak fraud score across     │  │  HTTP · gRPC · Prometheus        │
+│  7 timesteps                 │  │  Dynamic batching                │
+└──────────────────────────────┘  └──────────────────────────────────┘
 ```
 
 
@@ -138,214 +115,233 @@ This solution consists of two main components:
 
 **Location**: `zST-model-training-jupyter/APP_Fraud_LSTM_model_training.ipynb`
 
-This Jupyter notebook provides the end-to-end training pipeline for the APP fraud detection model:
+End-to-end training pipeline for the APP fraud detection model.
 
 #### Data Preparation
-- Loads datasets from IBM Synthetic Datasets:
-  - `us_small_banks.csv` - Bank information and metrics
-  - `us_small_liquid_accts_people.csv` - Personal account details
-  - `us_small_liquid_accts_companies.csv` - Company account details
-  - `us_small_bank_xfers-chrono.csv` - Transaction records
+Loads and joins four IBM Synthetic Dataset CSV files:
+- `us_small_banks.csv` — bank information and transaction counts
+- `us_small_liquid_accts_people.csv` — personal account details
+- `us_small_liquid_accts_companies.csv` — company account details
+- `us_small_bank_xfers-chrono.csv` — chronologically ordered transaction records
+
+The join enriches each transaction with sender-account features (country, currency, entity type, overdraft limit, branch/bank metrics) and recipient-account features (country, entity type), while filtering out cash transactions.
 
 #### Feature Engineering
-The model uses rich feature sets including:
-- **Transaction Features**: Amount, currency, format, type, day of week
-- **Fraud Labels**: `Is_APP_Fraud` target variable
-- **Sender Account Features**: Country, currency, entity type, overdraft limits, branch/bank metrics
-- **Recipient Account Features**: Country, entity type
-- **Temporal Features**: Cyclical encoding of time-based patterns
-- **Boolean Indicators**: Sufficient funds, overdraft status, hold status
+Twenty-four features are prepared per transaction:
 
-#### Preprocessing Pipeline with Keras
-The preprocessing pipeline is built using **Keras** and exported to **ONNX format** for production deployment:
-- **Temporal/Cyclical Features**: MinMax scaling for time-based features
-- **Boolean Features**: Pass-through for binary indicators
-- **Amount Features**: Imputation (constant 0) + MinMax scaling
-- **Count Features**: Median imputation + MinMax scaling
-- **Low Cardinality Categorical**: Most frequent imputation + One-Hot encoding
-- **High Cardinality Categorical**: Most frequent imputation + Ordinal encoding + MinMax scaling
+| Group | Features | Preprocessing |
+|---|---|---|
+| Temporal | Month, Day_Of_Month, Day_Of_Week, Hour, Minute | `CyclicalEncoding` → `Normalization` |
+| Boolean | Is_Weekday, Sufficient_Funds, Overdraft_Okay, Is_Hold | Cast to int, pass-through |
+| Amounts | Amount_Paid, From_End_Balance, From_Account_Max_Overdraft | `LogTransform` → `Normalization` |
+| Counts | From_Branch_Account_Count, From_Bank_Num_Transactions, From_Bank_Num_Total_Locations | `Normalization` |
+| Low-cardinality categorical (5) | From/To_Entity_Type, From_Account_Type, Payment_Format, Transaction_Type | `OnnxVocabOneHot` |
+| High-cardinality categorical (4) | From/To_Account_Country, From/To_Account_Currency | `OnnxVocabOrdinal` → `Normalization` |
+
+All preprocessing layers (`CyclicalEncoding`, `LogTransform`, `TimeOfDayEncoding`, `OnnxVocabOneHot`, `OnnxVocabOrdinal`) are defined in `fraud_model_layers.py` and are ONNX-compatible — they use only opset-13 primitives so they can be traced and exported.
 
 #### Model Architecture
-The model is built using **Keras** and exported to **ONNX format** for production deployment.
-- **LSTM-based Neural Network**: Captures sequential patterns in transaction data
-- **Training Configuration**: Optimized for fraud detection with class imbalance handling
-- **Evaluation Metrics**: Precision, recall, F1-score, and AUC-ROC
+- **Input**: 7-transaction sliding window; one `[batch, 7, 1]` tensor per feature
+- **Preprocessing**: Keras functional model applied per timestep (TimeDistributed-equivalent)
+- **LSTM**: Two stacked `LSTM(200, return_sequences=True)` layers
+- **Output**: `Dense(1, sigmoid)` — fraud probability at every timestep; `[batch, 7, 1]`
+- **Loss**: Focal loss (`gamma=2`, `alpha=0.25`) to handle class imbalance
+- **Early stopping**: Monitors training F1 (not `val_F1` — temporal distribution shift means val fraud scores differ from training patterns)
 
 #### Model Export
-The trained model and preprocessing pipeline are exported for production deployment:
-- **ONNX Model** (`.onnx`): Primary deployment format for LSTM model with Telum AI acceleration
-- **Keras Format** (`.keras`): Native TensorFlow/Keras format for reference
-- **Model Weights** (`.weights.h5`): Separate weight files
+The training notebook exports a single unified ONNX file that bundles preprocessing and LSTM together:
 
-### 2a. Model Serving Notebook
+```
+saved_model/
+├── fraud_detection_unified.onnx   ← primary deployment artifact (preprocessing + LSTM)
+├── fraud_detection_model.keras    ← Keras format (reference)
+└── model_weights.weights.h5       ← weights only (reference)
+```
+
+`fraud_detection_unified.onnx` takes 24 raw feature tensors as input and returns per-timestep fraud probabilities. No separate preprocessing step is needed at serving time.
+
+---
+
+### 2. Model Serving Notebook
 
 **Location**: `zST-model-serving-jupyter/APP_Fraud_LSTM_model_serving.ipynb`
 
-This Jupyter notebook demonstrates how to serve the trained ONNX model using **ONNX Runtime** and the **IBM Telum AI Execution Provider**.
+Demonstrates direct ONNX Runtime inference — no server or Docker required. The notebook loads `fraud_detection_unified.onnx`, auto-detects the best available Execution Provider, and runs inference against embedded sample sequences from the IBM Synthetic Payments dataset.
 
-### 2b. Model Serving Container
+#### What it covers
 
-**Location**: `zST-model-serving-triton/Dockerfile`
-This Triton container demonstrates how to serve the trained ONNX model using **NVIDIA Triton**, **ONNX Runtime** and the **IBM Telum AI Execution Provider**.
+| Section | Description |
+|---|---|
+| 1 · Dependencies | `pip install onnxruntime numpy` — no TensorFlow at serving time |
+| 2 · Load model & EP | Auto-detects `TelumExecutionProvider` (IBM z16+) or falls back to `CPUExecutionProvider` |
+| 3 · Inspect inputs/outputs | Lists all 24 input tensors and the `Identity:0` output |
+| 4 · Sample data | 2 genuine + 4 real APP fraud sequences from the CSV dataset |
+| 5 · Inference helper | `sequences_to_feed()` builds the `[N, 7, 1]` feed dict; `run_inference()` returns peak fraud score |
+| 6 · Inference results | Per-sequence fraud scores and classification at threshold 0.5 |
+| 7 · Timestep evolution | Per-timestep fraud probability tables for all 6 sequences |
+| 8 · Summary table | Accuracy across all 6 labelled sequences |
+| 9 · Live scoring | Sliding-window single-transaction example (appends suspicious Wire to genuine history) |
+| 10 · Benchmark | 1 000-sequence throughput benchmark |
 
-#### Key Components
+#### Key design notes
 
-- **Triton Inference Server**: Industry-standard inference serving solution supporting multiple frameworks
-- **ONNX Runtime**: High-performance inference engine for ONNX models
-- **IBM Telum AI Execution Provider**: Hardware acceleration leveraging IBM Z Integrated Accelerator for AI
-  - Repository: [IBM/onnxruntime-ep-telum](https://github.com/IBM/onnxruntime-ep-telum)
-  - Provides optimized inference on IBM z16 and newer systems
-  - Accelerates neural network operations using on-chip AI accelerator
+- **Output tensor name**: `Identity:0` (the ONNX graph output as produced by `tf2onnx`)
+- **Scoring**: Peak probability across all 7 timesteps — `raw[:, :, 0].max(axis=1)` — rather than the last timestep, because some fraud sequences end with a small cleanup payment after the peak (e.g. F-4: $14 after a $167 k wire)
+- **Vocabulary**: All string inputs must match the trained vocabulary exactly — `'United States'` not `'US'`, `'ACH'`/`'Wire'`/`'Debit Non-Prepaid'` not `'ACH Credit'`
 
-#### Inference Pipeline
+---
 
-1. **Load ONNX Preprocessor**: Import the adapted preprocessing pipeline from `fraud_detection_model.onnx`
-2. **Load ONNX Model**: Import the trained `fraud_detection_model.onnx` model
-3. **Configure Triton Server**: Set up model repository with unified preprocessing and inference model
-4. **Initialize ONNX Runtime with Telum EP**: Enable IBM Z AI acceleration
-5. **Real-time Inference**:
-   - Preprocess incoming transactions preprocessing pipeline
-   - Score preprocessed features with LSTM model
-   - Return fraud predictions with low-latency
-6. **Batch Processing**: Handle high-throughput fraud detection workloads
+### 3. Model Serving with Triton Container
 
-### 3. Datasets Directory
+**Location**: `zST-model-serving-triton/`
 
-**Location**: `zST-model-training-jupyter/datasets/`
+Serves `fraud_detection_unified.onnx` via NVIDIA Triton Inference Server running as a Docker container.
 
-Obtain a trial copy of the IBM Synthetic Data Sets and place it in this directory. The notebook expects the following CSV files:
-- `us_small_banks.csv`
-- `us_small_liquid_accts_people.csv`
-- `us_small_liquid_accts_companies.csv`
-- `us_small_bank_xfers-chrono.csv`
+#### Files
+
+| File | Purpose |
+|---|---|
+| `Dockerfile` | Builds the Triton container image (IBM Z or x86_64) |
+| `serve.py` | One-time setup: copies the ONNX file and writes `config.pbtxt` |
+| `test_triton_client.py` | HTTP test client (mirrors the serving notebook's sample data and tests) |
+| `build_and_deploy.sh` | One-shot build + launch script |
+| `model_repository/fraud_detection/config.pbtxt` | Triton model config (24 inputs, `Identity:0` output, dynamic batching) |
+| `model_repository/fraud_detection/1/model.onnx` | The deployed ONNX model |
+
+#### Model inputs / outputs
+
+| Tensor | dtype | Shape |
+|---|---|---|
+| 15 numeric inputs (`month` … `from_bank_num_total_locations`) | `FP32` | `[batch, 7, 1]` |
+| 9 categorical inputs (`from_entity_type` … `payment_currency`) | `BYTES` | `[batch, 7, 1]` |
+| **`Identity:0`** (fraud probability) | `FP32` | `[batch, 7, 1]` |
+
+#### Test suite
+
+| Test | Description |
+|---|---|
+| 1 · Server health | `is_server_live`, `is_server_ready`, `is_model_ready` |
+| 2 · Genuine sequences | G-1 (checking), G-2 (money market) — expects score < 0.5 |
+| 3 · Fraud sequences | F-1…F-4 (real APP fraud from CSV, 4 fraudsters) — expects score ≥ 0.5 |
+| 4 · Timestep evolution | Per-timestep probabilities for all 6 sequences |
+| 5 · Summary table | Accuracy across all 6 labelled sequences |
+| 6 · Live scoring | Suspicious late-night Wire appended to genuine G-1 history |
+| 7 · Throughput benchmark | 1 000-sequence timed batch |
+
+---
 
 ## Getting Started
 
 ### Prerequisites
 
-#### For Accelerating on IBM Z and IBM LinuxONE
-
 #### For Model Training
-- Python 3.8 or higher
+- Python 3.9+
 - Jupyter Notebook or JupyterLab
 - Required Python packages:
   ```
-  pandas
-  numpy
-  tensorflow
-  keras
-  joblib
-  tf2onnx
-  onnx
+  pandas numpy tensorflow keras tf2onnx onnx
   ```
+- IBM Synthetic Datasets CSV files (see Datasets section below)
 
-#### For Model Serving and Acceleration
-- Obtain a set of open-source AI packages in [AI Toolkit for IBM Z and LinuxONE.](https://ibm.github.io/ai-on-z-101/aitoolkitloz/)
-- IBM Z16 or newer system with Telum processor (for AI acceleration)
-- NVIDIA Triton Inference Server with Snap ML support
-- ONNX Runtime with IBM Telum Execution Provider
-  - Installation: [IBM/onnxruntime-ep-telum](https://github.com/IBM/onnxruntime-ep-telum)
-- Python 3.8 or higher
-- tritonclient Python package
-
-### Installation
-
-1. Clone this repository:
-   ```bash
-   git clone https://github.com/your-org/aionz-st-payments-fraud-tis.git
-   cd aionz-st-payments-fraud-tis
-   ```
-
-2. Install required dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-3. Place your datasets in the `zST-model-training-jupyter/datasets/` directory
-
-### Running the Training Pipeline
-
-1. Navigate to the Jupyter notebook directory:
-   ```bash
-   cd zST-model-training-jupyter
-   ```
-
-2. Launch Jupyter and open the training notebook:
-   ```bash
-   jupyter notebook APP_Fraud_LSTM_model_training.ipynb
-   ```
-
-3. Execute the notebook cells sequentially to:
-   - Load and prepare datasets
-   - Engineer features
-   - Build preprocessing pipeline with Keras
-   - Train the LSTM model
-   - Evaluate model performance
-   - Export adapted preprocessing and trained model in unified ONNX format
-
-### Training Output Artifacts
-
-After successful training, the following artifacts will be generated:
-
-- `saved_model/fraud_detection_unified.onnx` - **ONNX format model (primary deployment artifact)**
-- `saved_model/model.keras` - Complete Keras model (reference)
-- `saved_model/wts.weights.h5` - Model weights (reference)
-
-## Model Serving in Jupyter Notebooks
-
-**Location**: `zST-model-serving-jupyter/APP_Fraud_LSTM_model_serving.py`
-
-This notebook/script demonstrates direct ONNX Runtime inference against the unified ONNX model — no server required.
-
-### Prerequisites
-
+#### For Model Serving (Jupyter notebook)
 - Python 3.9+
-- ONNX Runtime:
   ```bash
   pip install onnxruntime numpy
   ```
-- On IBM z16 / LinuxONE, install the Telum Execution Provider instead:
+- On IBM z16 / LinuxONE 4+, install the Telum Execution Provider:
   ```bash
   # Follow build & install instructions at:
   # https://github.com/IBM/onnxruntime-ep-telum
   ```
-- Training output artifact: `saved_model/fraud_detection_unified.onnx`
-  (produced by the training notebook — run Part 1 first)
 
-### Steps
+#### For Model Serving (Triton container)
+- Docker 20.10+
+- Python 3.9+ (host-side test client)
+  ```bash
+  pip install tritonclient[http] numpy
+  ```
+- On IBM z16+ / LinuxONE 4+ the `Dockerfile` builds the [IBM ONNX Runtime Telum EP](https://github.com/IBM/onnxruntime-ep-telum) from source during `docker build` — no manual installation needed
 
-#### 1 · Ensure the trained model is available
+> **AI Toolkit for IBM Z and LinuxONE** — For a curated set of supported AI packages see the [AI Toolkit](https://ibm.github.io/ai-on-z-101/aitoolkitloz/).
 
-After running the training notebook, confirm the ONNX file exists:
+### Datasets
+
+Place the IBM Synthetic Dataset CSV files in `zST-model-training-jupyter/datasets/`:
+
+```
+zST-model-training-jupyter/datasets/
+├── us_small_banks.csv
+├── us_small_liquid_accts_people.csv
+├── us_small_liquid_accts_companies.csv
+└── us_small_bank_xfers-chrono.csv
+```
+
+---
+
+## Part 1 — Running the Training Pipeline
+
+```bash
+cd zST-model-training-jupyter
+jupyter notebook APP_Fraud_LSTM_model_training.ipynb
+```
+
+Run all cells sequentially. The notebook will:
+1. Load and join the four datasets
+2. Engineer features (temporal, boolean, amounts, counts, categoricals)
+3. Build and adapt the Keras preprocessing model
+4. Train the two-layer LSTM with focal loss and EarlyStopping
+5. Export the unified ONNX model
+
+### Training output artifacts
+
+```
+saved_model/
+├── fraud_detection_unified.onnx   ← primary serving artifact
+├── fraud_detection_model.keras    ← Keras reference
+└── model_weights.weights.h5       ← weights reference
+
+checkpoints/app_fraud_lstm_keras_preprocessing/
+├── best.weights.h5                ← best train-F1 epoch (restored by EarlyStopping)
+└── iter-NN.weights.h5             ← per-epoch checkpoints
+```
+
+---
+
+## Part 2 — Model Serving in Jupyter
+
+**Location**: `zST-model-serving-jupyter/APP_Fraud_LSTM_model_serving.ipynb`
+
+### Prerequisites
+
+```bash
+pip install onnxruntime numpy
+# IBM z16 / LinuxONE 4+: pip install onnxruntime-telum (or follow repo instructions)
+```
+
+Confirm the training artifact exists:
 ```
 saved_model/fraud_detection_unified.onnx
 ```
 
-#### 2 · Install dependencies
+### Steps
 
-```bash
-pip install onnxruntime numpy
-```
-
-#### 3 · Open the serving notebook
+#### 1 · Open the notebook
 
 ```bash
 cd zST-model-serving-jupyter
-jupyter notebook APP_Fraud_LSTM_model_serving.py
-# or run as a plain Python script:
-python3 APP_Fraud_LSTM_model_serving.py
+jupyter notebook APP_Fraud_LSTM_model_serving.ipynb
 ```
 
-#### 4 · Load the model and select Execution Provider
+#### 2 · Load the model and select Execution Provider
 
-The script auto-detects the best available provider:
+The notebook auto-detects the best available provider:
 
 ```python
 import onnxruntime as ort
 
 ONNX_MODEL_PATH = './saved_model/fraud_detection_unified.onnx'
-TELUM_EP = 'TelumExecutionProvider'
-CPU_EP   = 'CPUExecutionProvider'
+TELUM_EP        = 'TelumExecutionProvider'
+CPU_EP          = 'CPUExecutionProvider'
 
 available = ort.get_available_providers()
 providers = [TELUM_EP, CPU_EP] if TELUM_EP in available else [CPU_EP]
@@ -353,53 +349,52 @@ providers = [TELUM_EP, CPU_EP] if TELUM_EP in available else [CPU_EP]
 sess_options = ort.SessionOptions()
 sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
 
-session = ort.InferenceSession(
-    ONNX_MODEL_PATH,
-    sess_options=sess_options,
-    providers=providers,
-)
+session = ort.InferenceSession(ONNX_MODEL_PATH, sess_options=sess_options, providers=providers)
 print(f'Active EP: {session.get_providers()[0]}')
 ```
 
-> On IBM z16 / LinuxONE with the Telum EP installed the AIU is used automatically.
+> On IBM z16 / LinuxONE 4+ with the Telum EP installed, the AIU is used automatically.
 > On all other platforms the standard CPU EP is used.
 
-#### 5 · Inspect model inputs and outputs
-
-The unified ONNX model accepts **24 named inputs**, one tensor per feature, each shaped `[batch, 7, 1]`:
-
-| Tensor group | dtype | Shape |
-|---|---|---|
-| 15 numeric inputs (`month` … `from_bank_num_total_locations`) | `FP32` | `[batch, 7, 1]` |
-| 9 categorical inputs (`from_entity_type` … `payment_currency`) | `BYTES` (string) | `[batch, 7, 1]` |
-| **`output_0`** (fraud probability) | `FP32` | `[batch, 7, 1]` |
-
-The fraud probability for the **most-recent transaction** is `output_0[:, -1, 0]`.
-
-#### 6 · Run inference on sample transactions
+#### 3 · Inspect model inputs and outputs
 
 ```python
-# Build the feed dict (one ndarray per input, shape [N, 7, 1])
-feed = sequences_to_feed(sequences)   # helper defined in the notebook
+for inp in session.get_inputs():
+    print(f'  {inp.name:<35}  type={inp.type:<16}  shape={inp.shape}')
+
+for out in session.get_outputs():
+    print(f'  {out.name:<35}  type={out.type:<16}  shape={out.shape}')
+```
+
+The unified ONNX model accepts **24 named inputs**, one tensor per feature, each shaped `[batch, 7, 1]`, and returns a single output `Identity:0` shaped `[batch, 7, 1]`.
+
+#### 4 · Run inference on sample transactions
+
+```python
+# Build the feed dict: one ndarray per input, shape [N, 7, 1]
+feed = sequences_to_feed(sequences)     # helper defined in the notebook
 
 # Run
-raw = session.run(['output_0'], feed)[0]   # [N, 7, 1]
-fraud_probs = raw[:, -1, 0]               # last-timestep score per sequence
+output_names = [out.name for out in session.get_outputs()]
+raw = session.run(output_names, feed)[0]   # [N, 7, 1]
+
+# Peak fraud probability across all 7 timesteps
+fraud_probs = raw[:, :, 0].max(axis=1)
 
 THRESHOLD = 0.5
 for i, prob in enumerate(fraud_probs):
-    label = 'FRAUD' if prob >= THRESHOLD else 'GENUINE'
+    label = '🚨 FRAUD' if prob >= THRESHOLD else '✅ GENUINE'
     print(f'Sequence {i+1}: score={prob:.4f}  →  {label}')
 ```
 
-#### 7 · Live single-transaction scoring
+#### 5 · Live single-transaction scoring
 
 Maintain a sliding window of the last 6 transactions, append the new transaction, then call the model:
 
 ```python
-history_window  = last_6_transactions_for_account   # list of 6 rows
+history_window  = last_6_transactions_for_account    # list of 6 rows × 24 features
 new_transaction = [month, day_of_month, ..., payment_currency]
-live_sequence   = [history_window + [new_transaction]]  # shape [1, 7, 24]
+live_sequence   = [history_window + [new_transaction]]   # shape [1, 7, 24]
 
 live_prob, _ = run_inference(live_sequence)
 print(f'Fraud score: {live_prob[0]:.4f}')
@@ -407,11 +402,9 @@ print(f'Fraud score: {live_prob[0]:.4f}')
 
 ---
 
-## Model Serving with Triton container
+## Part 3 — Model Serving with Triton Container
 
 **Location**: `zST-model-serving-triton/`
-
-The trained ONNX model is served via **NVIDIA Triton Inference Server** running as a Docker container. Triton exposes HTTP/REST, gRPC, and Prometheus endpoints.
 
 ### Prerequisites
 
@@ -446,7 +439,7 @@ python3 serve.py
 
 `serve.py` copies the ONNX file and writes `config.pbtxt`. Only needs to run once (or after a model update).
 
-Expected output layout:
+Expected layout:
 ```
 model_repository/
 └── fraud_detection/
@@ -458,7 +451,7 @@ model_repository/
 #### 3 · Build the Docker image
 
 ```bash
-# IBM z16 / LinuxONE (default — uses IBM Z accelerated Triton image):
+# IBM z16+ / LinuxONE 4+ (default — uses IBM Z accelerated Triton image):
 docker build -t triton-fraud-detection .
 
 # x86_64 development machine:
@@ -480,24 +473,17 @@ docker run -d \
 ```
 
 | Port | Protocol | Purpose |
-|------|----------|---------|
-| 8000 | HTTP/REST | Inference, health, metadata |
+|---|---|---|
+| 8000 | HTTP/REST | Inference (`POST /v2/models/fraud_detection/infer`), health, metadata |
 | 8001 | gRPC | Inference (gRPC protocol) |
 | 8002 | HTTP | Prometheus metrics (`/metrics`) |
 
 #### 5 · Verify server health
 
 ```bash
-# Server live
 curl http://localhost:8000/v2/health/live
-
-# Server ready
 curl http://localhost:8000/v2/health/ready
-
-# Model metadata
 curl http://localhost:8000/v2/models/fraud_detection
-
-# Prometheus metrics
 curl http://localhost:8002/metrics
 ```
 
@@ -511,13 +497,13 @@ python3 test_triton_client.py [--url localhost:8000]
 The test suite covers:
 
 | Test | Description |
-|------|-------------|
+|---|---|
 | 1 · Server health | `is_server_live`, `is_server_ready`, `is_model_ready` |
-| 2 · Genuine sequences | G-1 (retail), G-2 (business) — expects score < 0.5 |
-| 3 · Fraud sequences | F-1 (impersonation scam), F-2 (invoice fraud) — expects score ≥ 0.5 |
-| 4 · Timestep evolution | Per-timestep probabilities for all 4 sequences |
-| 5 · Summary table | Accuracy across 4 labelled sequences |
-| 6 · Live scoring | Suspicious late-night wire appended to genuine history |
+| 2 · Genuine sequences | G-1 (checking), G-2 (money market) — expects score < 0.5 |
+| 3 · Fraud sequences | F-1…F-4 (real APP fraud from CSV, 4 fraudsters) — expects score ≥ 0.5 |
+| 4 · Timestep evolution | Per-timestep probabilities for all 6 sequences |
+| 5 · Summary table | Accuracy across all 6 labelled sequences |
+| 6 · Live scoring | Suspicious late-night Wire appended to genuine G-1 history |
 | 7 · Throughput benchmark | 1 000-sequence timed batch |
 
 #### 7 · One-shot build + launch (alternative)
@@ -529,23 +515,25 @@ bash build_and_deploy.sh
 
 The script runs steps 1–6 automatically and prints the endpoints when the server is ready.
 
-#### 8 · (Optional) Enable IBM Telum AIU acceleration
+#### 8 · IBM Telum AIU acceleration (s390x)
 
-Add the following `optimization` block to `model_repository/fraud_detection/config.pbtxt` before starting the container:
+On IBM z16+ / LinuxONE 4+, the `Dockerfile` automatically builds the [IBM ONNX Runtime Telum EP](https://github.com/IBM/onnxruntime-ep-telum) from source and stages `libtelum_plugin_ep.so` at `/opt/telum_ep/`. The `tritonserver` start command registers the library via `--onnxruntime-execution-provider-library` when the file is present.
+
+To also instruct Triton's ONNX Runtime backend to prefer the Telum EP for individual models, add the following `optimization` block to `model_repository/fraud_detection/config.pbtxt`:
 
 ```protobuf
 optimization {
   execution_accelerators {
     cpu_execution_accelerator [
       {
-        name: "telum"
+        name: "TelumPluginExecutionProvider"
       }
     ]
   }
 }
 ```
 
-This routes compatible ONNX operators to the on-chip **Telum AI Unit (AIU)** on IBM z16 / LinuxONE Emperor 4 via the [IBM ONNX Runtime Telum EP](https://github.com/IBM/onnxruntime-ep-telum).
+On x86_64 the build step is skipped automatically (`TARGETARCH` ≠ `s390x`) and the library is absent, so the flag is omitted and the standard CPU EP is used.
 
 #### 9 · Stop / remove the container
 
@@ -558,11 +546,15 @@ docker stop triton-server && docker rm triton-server
 | Component | Description |
 |---|---|
 | `fraud_detection_unified.onnx` | Unified ONNX model — preprocessing + LSTM + sigmoid output head |
-| `config.pbtxt` | Triton model configuration (inputs, outputs, dynamic batching) |
+| `config.pbtxt` | Triton model configuration (24 inputs, `Identity:0` output, dynamic batching up to 256) |
+| `serve.py` | Sets up the model repository and generates `config.pbtxt` |
+| `test_triton_client.py` | HTTP test client using real CSV fraud sequences |
 | Triton Inference Server | Production inference platform (HTTP, gRPC, Prometheus) |
 | ONNX Runtime backend | High-performance ONNX execution within Triton |
-| IBM Telum EP *(optional)* | Hardware AI acceleration on IBM z16 / LinuxONE |
+| `libtelum_plugin_ep.so` | Built from source on s390x; staged at `TELUM_EP_LIBRARY_PATH=/opt/telum_ep/` |
+| IBM Telum EP | Registered via `--onnxruntime-execution-provider-library` on s390x; skipped on x86_64 |
 
+---
 
 ## Contributing
 
@@ -583,7 +575,7 @@ This project is licensed under the terms specified in the LICENSE file.
 
 - [IBM Z 101](https://www.ibm.com/z/learn/101)
 - [Linux on Z AI Solution Templates](https://ambitus.github.io/aionz-solution-templates/)
-- [IBM Snap ML](https://www.zurich.ibm.com/snapml/) - High-performance machine learning library for IBM Z
+- [AI Toolkit for IBM Z and LinuxONE](https://ibm.github.io/ai-on-z-101/aitoolkitloz/)
 - [IBM ONNX Runtime Telum Execution Provider](https://github.com/IBM/onnxruntime-ep-telum)
 - [NVIDIA Triton Inference Server](https://github.com/triton-inference-server/server)
 - [ONNX Runtime](https://onnxruntime.ai/)
