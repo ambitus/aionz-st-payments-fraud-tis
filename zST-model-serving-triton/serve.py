@@ -121,23 +121,22 @@ class TritonPythonModel:
         try:
             import onnxruntime as ort
 
-            sess_options = ort.SessionOptions()
             providers = ["CPUExecutionProvider"]
             if os.path.exists(telum_lib):
                 try:
-                    sess_options.register_custom_ops_library(telum_lib)
+                    ort.capi.onnxruntime_pybind11_state.register_execution_provider_library(
+                        "TelumPluginExecutionProvider", telum_lib
+                    )
                     providers = ["TelumPluginExecutionProvider", "CPUExecutionProvider"]
                 except Exception as ep_err:
                     print(f"[TritonPythonModel] Telum EP registration warning: {ep_err}")
 
-            self.ort_session = ort.InferenceSession(
-                model_path, sess_options=sess_options, providers=providers
-            )
+            self.ort_session = ort.InferenceSession(model_path, providers=providers)
             self.input_names = [inp.name for inp in self.ort_session.get_inputs()]
             self.output_names = [out.name for out in self.ort_session.get_outputs()]
             print(f"[TritonPythonModel] ONNX Runtime session initialized with providers: {self.ort_session.get_providers()}")
         except Exception as e:
-            print(f"[TritonPythonModel] Notice: ONNX Runtime not available in Python environment ({e}). Initialized in fallback mode.")
+            print(f"[TritonPythonModel] Notice: ONNX Runtime initialization failed ({e}). Initialized in fallback mode.")
             self.input_names = [inp["name"] for inp in self.model_config.get("input", [])]
             self.output_names = [out["name"] for out in self.model_config.get("output", [])]
 
@@ -149,11 +148,18 @@ class TritonPythonModel:
                 for name in self.input_names:
                     tensor = pb_utils.get_input_tensor_by_name(request, name)
                     if tensor is not None:
-                        ort_inputs[name] = tensor.as_numpy()
+                        val = tensor.as_numpy()
+                        if val.dtype.kind in ('S', 'a', 'V', 'O', 'U'):
+                            if val.dtype.kind != 'O' or (val.size > 0 and isinstance(val.flat[0], bytes)):
+                                val = np.vectorize(
+                                    lambda x: x.decode('utf-8', errors='ignore') if isinstance(x, bytes) else str(x),
+                                    otypes=[object]
+                                )(val)
+                        ort_inputs[name] = val
                 try:
                     ort_outputs = self.ort_session.run(self.output_names, ort_inputs)
                     out_tensors = [
-                        pb_utils.Tensor(self.output_names[i], ort_outputs[i])
+                        pb_utils.Tensor(self.output_names[i], ort_outputs[i].astype(np.float32))
                         for i in range(len(self.output_names))
                     ]
                     responses.append(pb_utils.InferenceResponse(output_tensors=out_tensors))

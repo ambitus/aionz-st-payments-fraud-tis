@@ -200,14 +200,14 @@ def sequences_to_triton_inputs(sequences):
             # Triton HTTP string inputs must be bytes arrays
             arr_bytes = arr.astype(bytes)
             inp = httpclient.InferInput(onnx_name, arr_bytes.shape, "BYTES")
-            inp.set_data_from_numpy(arr_bytes)
+            inp.set_data_from_numpy(arr_bytes, binary_data=False)
         else:
             arr = np.zeros((n_seq, TIMESTEPS, 1), dtype=np.float32)
             for s, seq in enumerate(sequences):
                 for t, row in enumerate(seq):
                     arr[s, t, 0] = float(row[col_idx])
             inp = httpclient.InferInput(onnx_name, arr.shape, "FP32")
-            inp.set_data_from_numpy(arr)
+            inp.set_data_from_numpy(arr, binary_data=False)
 
         inputs.append(inp)
 
@@ -225,7 +225,7 @@ def run_inference(client, sequences):
       raw_output   ndarray [N,7,1] — per-timestep fraud probabilities
     """
     inputs  = sequences_to_triton_inputs(sequences)
-    outputs = [httpclient.InferRequestedOutput(OUTPUT_NAME)]
+    outputs = [httpclient.InferRequestedOutput(OUTPUT_NAME, binary_data=False)]
 
     response = client.infer(
         model_name=MODEL_NAME,
