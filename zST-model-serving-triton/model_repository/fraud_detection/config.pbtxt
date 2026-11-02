@@ -1,0 +1,196 @@
+name: "fraud_detection"
+backend: "python"
+max_batch_size: 1024
+
+# ── Dynamic batching ──────────────────────────────────────────
+dynamic_batching {
+  preferred_batch_size: [ 8, 32, 64 ]
+  max_queue_delay_microseconds: 5000
+}
+
+# ── Instance group ───────────────────────────────────────────
+instance_group [
+  {
+    kind: KIND_CPU
+    count: 1
+  }
+]
+
+# ── Inputs ────────────────────────────────────────────────────
+input [
+  {
+    name: "month"
+    data_type: TYPE_FP32
+    dims: [ 7, 1 ]
+  }
+]
+input [
+  {
+    name: "day_of_month"
+    data_type: TYPE_FP32
+    dims: [ 7, 1 ]
+  }
+]
+input [
+  {
+    name: "day_of_week"
+    data_type: TYPE_FP32
+    dims: [ 7, 1 ]
+  }
+]
+input [
+  {
+    name: "hour"
+    data_type: TYPE_FP32
+    dims: [ 7, 1 ]
+  }
+]
+input [
+  {
+    name: "minute"
+    data_type: TYPE_FP32
+    dims: [ 7, 1 ]
+  }
+]
+input [
+  {
+    name: "is_weekday"
+    data_type: TYPE_FP32
+    dims: [ 7, 1 ]
+  }
+]
+input [
+  {
+    name: "sufficient_funds"
+    data_type: TYPE_FP32
+    dims: [ 7, 1 ]
+  }
+]
+input [
+  {
+    name: "overdraft_okay"
+    data_type: TYPE_FP32
+    dims: [ 7, 1 ]
+  }
+]
+input [
+  {
+    name: "is_hold"
+    data_type: TYPE_FP32
+    dims: [ 7, 1 ]
+  }
+]
+input [
+  {
+    name: "amount_paid"
+    data_type: TYPE_FP32
+    dims: [ 7, 1 ]
+  }
+]
+input [
+  {
+    name: "from_initial_balance"
+    data_type: TYPE_FP32
+    dims: [ 7, 1 ]
+  }
+]
+input [
+  {
+    name: "from_account_max_overdraft"
+    data_type: TYPE_FP32
+    dims: [ 7, 1 ]
+  }
+]
+input [
+  {
+    name: "from_branch_account_count"
+    data_type: TYPE_FP32
+    dims: [ 7, 1 ]
+  }
+]
+input [
+  {
+    name: "from_bank_num_transactions"
+    data_type: TYPE_FP32
+    dims: [ 7, 1 ]
+  }
+]
+input [
+  {
+    name: "from_bank_num_total_locations"
+    data_type: TYPE_FP32
+    dims: [ 7, 1 ]
+  }
+]
+input [
+  {
+    name: "from_entity_type"
+    data_type: TYPE_STRING
+    dims: [ 7, 1 ]
+  }
+]
+input [
+  {
+    name: "from_account_type"
+    data_type: TYPE_STRING
+    dims: [ 7, 1 ]
+  }
+]
+input [
+  {
+    name: "to_entity_type"
+    data_type: TYPE_STRING
+    dims: [ 7, 1 ]
+  }
+]
+input [
+  {
+    name: "payment_format"
+    data_type: TYPE_STRING
+    dims: [ 7, 1 ]
+  }
+]
+input [
+  {
+    name: "transaction_type"
+    data_type: TYPE_STRING
+    dims: [ 7, 1 ]
+  }
+]
+input [
+  {
+    name: "from_account_country"
+    data_type: TYPE_STRING
+    dims: [ 7, 1 ]
+  }
+]
+input [
+  {
+    name: "from_account_currency"
+    data_type: TYPE_STRING
+    dims: [ 7, 1 ]
+  }
+]
+input [
+  {
+    name: "to_account_country"
+    data_type: TYPE_STRING
+    dims: [ 7, 1 ]
+  }
+]
+input [
+  {
+    name: "payment_currency"
+    data_type: TYPE_STRING
+    dims: [ 7, 1 ]
+  }
+]
+
+# ── Output ────────────────────────────────────────────────────
+output [
+  {
+    name: "Identity:0"
+    data_type: TYPE_FP32
+    dims: [ 7, 1 ]
+  }
+]
